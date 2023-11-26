@@ -1,0 +1,77 @@
+import paramiko
+from paramiko import SSHException
+from paramiko.py3compat import u
+
+# Define a simple SSH server
+class SimpleSSHServer(paramiko.ServerInterface):
+    def __init__(self):
+        self.event = threading.Event()
+        self.allowed_authentications = ['password']
+
+    def check_auth_password(self, username, password):
+        # Add your authentication logic here
+        return paramiko.AUTH_SUCCESSFUL
+
+    def get_allowed_auths(self, username):
+        return ' '.join(self.allowed_authentications)
+
+# Set up SSH server with Ed25519 key
+host_key = paramiko.Ed25519Key(filename="path/to/your/private/key_ed25519")
+ssh_server = "0.0.0.0"
+ssh_port = 2222
+
+try:
+    server = paramiko.Transport((ssh_server, ssh_port))
+    server.add_server_key(host_key)
+
+    # Set up the server
+    server.set_subsystem_handler("sftp", paramiko.SFTPServer, paramiko.SFTPServerInterface)
+
+    # Start the server
+    server.start_server(server=SimpleSSHServer())
+
+    # Allow SSHv2 and TLS 1.3 only
+    server.local_version = 'SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.3'
+    server.add_server_key(host_key)
+    server.set_security_options(
+        key_types=[
+            'ecdsa-sha2-nistp256',
+            'ecdsa-sha2-nistp384',
+            'ecdsa-sha2-nistp521',
+            'ssh-rsa',
+            'ssh-ed25519'
+        ],
+        ciphers=[
+            'chacha20-poly1305@openssh.com',
+            'aes256-gcm@openssh.com',
+            'aes128-gcm@openssh.com',
+            'aes256-ctr',
+            'aes192-ctr',
+            'aes128-ctr'
+        ],
+        macs=[
+            'hmac-sha2-256-etm@openssh.com',
+            'hmac-sha2-512-etm@openssh.com',
+            'hmac-sha2-256',
+            'hmac-sha2-512'
+        ],
+        kex_algorithms=[
+            'curve25519-sha256@libssh.org',
+            'diffie-hellman-group-exchange-sha256',
+            'diffie-hellman-group16-sha512',
+            'diffie-hellman-group18-sha512',
+            'diffie-hellman-group14-sha256',
+            'diffie-hellman-group14-sha1',
+            'ecdh-sha2-nistp256',
+            'ecdh-sha2-nistp384',
+            'ecdh-sha2-nistp521'
+        ]
+    )
+
+    print(f"SSH server listening on {ssh_server}:{ssh_port}")
+    server.accept(20)
+
+except SSHException as e:
+    print(f"Error: {e}")
+finally:
+    server.close()
